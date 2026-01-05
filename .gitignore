@@ -1,0 +1,14 @@
+# Node.js
+/app/node_modules
+/app/package-lock.json
+
+# Frontend
+/app/frontend/node_modules
+/app/frontend/package-lock.json
+/app/frontend/dist
+
+# Terraform
+/infra/.terraform/
+/infra/*.tfstate
+/infra/*.tfstate.backup
+/infra/.terraform.lock.hcl

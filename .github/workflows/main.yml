@@ -1,0 +1,130 @@
+name: Gerenciar Infraestrutura (Terraform AKS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Escolha a ação'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+        - deploy
+        - destroy
+
+permissions:
+  id-token: write
+  contents: read
+
+# Configuração de ambiente para o Terraform autenticar
+env:
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  # Se você usou o JSON único no secret AZURE_CREDENTIALS, o azure/login lida com isso,
+  # mas o Terraform precisa das variáveis acima ou de uma configuração específica.
+  # Para simplificar hoje, vamos confiar no azure/login gerando o arquivo de credenciais.
+
+jobs:
+  # ==============================================================================
+  # JOB 1: VALIDAR (Roda sempre que não for Destroy)
+  # ==============================================================================
+  validate:
+    if: ${{ github.event.inputs.action == 'deploy' }}
+    name: 🔎 Validar Código
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login no Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Plan
+        working-directory: ./infra
+        run: |
+          terraform init
+          terraform validate
+          terraform plan -var="vm_size=Standard_D2s_v3" -out=tfplan
+
+  # ==============================================================================
+  # JOB 2: DEPLOY (Roda se Validar passar)
+  # ==============================================================================
+  deploy:
+    if: ${{ github.event.inputs.action == 'deploy' }}
+    name: 🚀 Aplicar Infraestrutura
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login no Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Apply
+        working-directory: ./infra
+        run: |
+          terraform init
+          # Usa o plano gerado na etapa anterior (idealmente usaria artifacts, mas aqui simplificamos)
+          terraform apply -auto-approve -var="vm_size=Standard_D2s_v3"
+
+  # ==============================================================================
+  # JOB 3: PÓS-TESTES (Verifica se o Cluster está vivo)
+  # ==============================================================================
+  post-tests:
+    if: ${{ github.event.inputs.action == 'deploy' }}
+    name: ✅ Testar Conexão AKS
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login no Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Configurar Kubectl
+        run: |
+          # Baixa as credenciais do cluster recém-criado para testar
+          az aks get-credentials --resource-group rg-ecommerce-michelotti --name aks-cluster-michelotti --overwrite-existing
+
+      - name: Verificar Nodes
+        run: |
+          echo "Verificando se os nós estão prontos..."
+          kubectl get nodes
+
+  # ==============================================================================
+  # JOB 4: DESTRUIR (Só roda se você selecionar 'destroy' no input)
+  # ==============================================================================
+  destroy:
+    if: ${{ github.event.inputs.action == 'destroy' }}
+    name: 🧨 Destruir Tudo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login no Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Destroy
+        working-directory: ./infra
+        run: |
+          terraform init
+          terraform destroy -auto-approve -var="vm_size=Standard_D2s_v3"

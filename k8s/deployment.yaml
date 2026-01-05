@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e-commerce-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: e-commerce
+  template:
+    metadata:
+      labels:
+        app: e-commerce
+    spec:
+      containers:
+      - name: site-container
+        image: acrdevopslzmichelotti01.azurecr.io/e-commerce:v1
+        ports:
+        - containerPort: 80
