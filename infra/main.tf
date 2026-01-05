@@ -1,19 +1,3 @@
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
-    }
-  }
-
-  backend "azurerm" {
-    resource_group_name  = "rg-terraform-state"
-    storage_account_name = "tfstate5289"
-    container_name       = "tfstate"
-    key                  = "ecommerce.terraform.tfstate"
-  }
-}
-
 resource "azurerm_resource_group" "rg" {
   name     = var.rg_name
   location = var.location
